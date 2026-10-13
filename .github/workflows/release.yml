@@ -1,0 +1,107 @@
+name: Build & Release Android APK
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-android:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Semantic Version Tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          release_branches: main
+          create_annotated_tag: true
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Project Dependencies
+        run: flutter pub get
+
+      - name: Run Code Analysis & Unit Tests
+        run: |
+          flutter analyze
+          flutter test
+
+      - name: Build Release APKs
+        run: |
+          VERSION="${{ steps.tag_version.outputs.new_version }}"
+          BUILD_NUM="${{ github.run_number }}"
+          echo "Building Flowy APK version: $VERSION (Build #$BUILD_NUM)"
+
+          # 1. Build Split-per-ABI APKs (Ringan, optimal untuk arm64-v8a dan armeabi-v7a)
+          flutter build apk --release --split-per-abi --build-name="$VERSION" --build-number="$BUILD_NUM"
+
+          # 2. Build Universal Fat APK (Dapat dipasang di semua perangkat Android)
+          flutter build apk --release --build-name="$VERSION" --build-number="$BUILD_NUM"
+
+      - name: Prepare Release Artifacts
+        run: |
+          VERSION="${{ steps.tag_version.outputs.new_version }}"
+          mkdir -p release-assets
+
+          # Salin dan beri nama resmi pada berkas APK
+          if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
+            cp "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "release-assets/Flowy-${VERSION}-arm64-v8a.apk"
+          fi
+
+          if [ -f "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" ]; then
+            cp "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" "release-assets/Flowy-${VERSION}-armeabi-v7a.apk"
+          fi
+
+          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            cp "build/app/outputs/flutter-apk/app-release.apk" "release-assets/Flowy-${VERSION}-universal.apk"
+          fi
+
+          echo "Daftar berkas APK yang siap dirilis:"
+          ls -lh release-assets/
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          name: "Flowy Music Player ${{ steps.tag_version.outputs.new_tag }}"
+          body: |
+            ## Pembaruan Flowy Music Player (${{ steps.tag_version.outputs.new_tag }})
+
+            ### 📦 Berkas Instalasi Android APK Siap Pasang:
+            - **`Flowy-${{ steps.tag_version.outputs.new_version }}-arm64-v8a.apk`** (Direkomendasikan untuk sebagian besar ponsel Android modern termasuk OPPO A16).
+            - **`Flowy-${{ steps.tag_version.outputs.new_version }}-armeabi-v7a.apk`** (Versi paling ringkas untuk ponsel 32-bit).
+            - **`Flowy-${{ steps.tag_version.outputs.new_version }}-universal.apk`** (Dapat dipasang di semua arsitektur Android).
+
+            ---
+            ${{ steps.tag_version.outputs.changelog }}
+          generate_release_notes: true
+          files: release-assets/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
