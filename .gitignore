@@ -1,0 +1,148 @@
+# -----------------------------------------------------------------------------
+# Flowy - Comprehensive Flutter & Multi-Platform .gitignore
+# -----------------------------------------------------------------------------
+
+# Miscellaneous, Temporary & OS Files
+*.class
+*.log
+*.pyc
+*.swp
+*.bak
+*.tmp
+*.temp
+*~
+*copy.md
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# Flutter / Dart / Pub
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+/coverage/
+doc/api/
+
+# DevTools, Profiling & Debug Dumps
+dart_devtools_*
+*.cpuprofile
+*.timeline.json
+*.jsonl
+
+# Symbolication, Obfuscation & R8/ProGuard Outputs
+app.*.symbols
+app.*.map.json
+**/symbols/
+mapping.txt
+missing_rules.txt
+seeds.txt
+usage.txt
+configuration.txt
+
+# Environment Variables & Secrets
+.env
+.env.*
+*.env
+*.key
+*.keystore
+*.jks
+local.properties
+key.properties
+google-services.json
+GoogleService-Info.plist
+
+# App Data, Downloaded Music & Local JSON Caches
+downloaded_tracks.json
+jamendo_catalog.json
+downloaded_music/
+*.mp3
+*.flac
+*.wav
+*.m4a
+*.aac
+*.ogg
+
+# Android Binaries, Kotlin & Gradle Builds
+*.apk
+*.aab
+*.dex
+.gradle/
+android/.gradle/
+android/.kotlin/
+**/.kotlin/
+android/captures/
+android/gradleBuild/
+android/local.properties
+android/key.properties
+/android/app/debug
+/android/app/profile
+/android/app/release
+android/app/build/
+**/build/
+
+# Jar files (ignore jar binaries except Gradle wrapper)
+*.jar
+!android/gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# iOS & macOS
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Pods/
+**/ios/.symlinks/
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+**/xcuserdata/
+DerivedData/
+macos/Flutter/ephemeral/
+
+# Windows & Linux Desktop
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+*.obj
+*.pdb
+*.ilk
+
+# Web
+web/bundle.*
+web/favicon.png.cache
+
+# IDE - IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+android/.idea/
+android/*.iml
+android/app/*.iml
+
+# IDE - Visual Studio Code
+# Keep project shared settings, ignore user states
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Tooling, Scraper & Preview Artifacts
+.stitch/
+stitch-output/
+.widget_preview/
