@@ -17,10 +17,8 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
-}
 
-subprojects {
-    afterEvaluate {
+    val injectNamespace: () -> Unit = {
         val androidExt = extensions.findByName("android")
         if (androidExt != null) {
             val getNamespaceMethod = androidExt.javaClass.methods.firstOrNull {
@@ -49,6 +47,12 @@ subprojects {
                 setNamespaceMethod?.invoke(androidExt, targetNamespace)
             }
         }
+    }
+
+    if (project.state.executed) {
+        injectNamespace()
+    } else {
+        afterEvaluate { injectNamespace() }
     }
 }
 
