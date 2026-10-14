@@ -18,9 +18,35 @@ subprojects {
 subprojects {
     project.evaluationDependsOn(":app")
 
-    val injectNamespace: () -> Unit = {
+    val configureSubproject: () -> Unit = {
         val androidExt = extensions.findByName("android")
         if (androidExt != null) {
+            // 1. Force compileSdk >= 34 for legacy libraries requiring newer Android APIs
+            try {
+                val getCompileSdkMethod = androidExt.javaClass.methods.firstOrNull {
+                    it.name == "getCompileSdk" && it.parameterCount == 0
+                } ?: androidExt.javaClass.methods.firstOrNull {
+                    it.name == "getCompileSdkVersion" && it.parameterCount == 0
+                }
+                val currentCompileSdk = getCompileSdkMethod?.invoke(androidExt)
+                val compileSdkInt = when (currentCompileSdk) {
+                    is Number -> currentCompileSdk.toInt()
+                    is String -> currentCompileSdk.removePrefix("android-").toIntOrNull()
+                    else -> null
+                }
+
+                if (compileSdkInt == null || compileSdkInt < 34 || project.name == "on_audio_query_android") {
+                    val setCompileSdkMethod = androidExt.javaClass.methods.firstOrNull {
+                        it.name == "setCompileSdkVersion" && it.parameterCount == 1 && it.parameterTypes[0] == Int::class.javaPrimitiveType
+                    } ?: androidExt.javaClass.methods.firstOrNull {
+                        it.name == "compileSdkVersion" && it.parameterCount == 1 && it.parameterTypes[0] == Int::class.javaPrimitiveType
+                    } ?: androidExt.javaClass.methods.firstOrNull {
+                        it.name == "setCompileSdk" && it.parameterCount == 1 && it.parameterTypes[0] == Integer::class.java
+                    }
+                    setCompileSdkMethod?.invoke(androidExt, 34)
+                }
+            } catch (_: Exception) {}
+
             val getNamespaceMethod = androidExt.javaClass.methods.firstOrNull {
                 it.name == "getNamespace" && it.parameterCount == 0
             }
@@ -50,9 +76,9 @@ subprojects {
     }
 
     if (project.state.executed) {
-        injectNamespace()
+        configureSubproject()
     } else {
-        afterEvaluate { injectNamespace() }
+        afterEvaluate { configureSubproject() }
     }
 }
 
