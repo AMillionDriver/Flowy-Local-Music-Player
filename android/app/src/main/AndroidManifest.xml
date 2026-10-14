@@ -42,11 +42,12 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
 
-        <!-- Media Button Receiver for Headset & Bluetooth controls -->
-        <receiver android:name="androidx.media.session.MediaButtonReceiver"
+        <!-- Media Button Receiver for Headset, Bluetooth & Notification controls -->
+        <receiver android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
