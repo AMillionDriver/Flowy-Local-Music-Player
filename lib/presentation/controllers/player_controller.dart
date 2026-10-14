@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../data/models/track.dart';
 import '../../data/models/jamendo_track.dart';
@@ -64,6 +65,7 @@ class PlayerController extends ChangeNotifier {
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
   StreamSubscription<PlayerState>? _playerStateSub;
+  StreamSubscription<MediaItem?>? _mediaItemSub;
 
   PlayerController({
     TrackRepository? repository,
@@ -78,7 +80,19 @@ class PlayerController extends ChangeNotifier {
         _jamendoService = jamendoService ?? JamendoService(),
         _downloadService = downloadService ?? MusicDownloadService() {
     _tracks = List<Track>.from(_repository.getTracks());
+
+    // Sinkronkan antrean lagu ke FlowyAudioHandler
     if (_tracks.isNotEmpty) {
+      _audioService.handler.updatePlaylist(_tracks);
+    }
+
+    // Re-attach State: Jika audio sedang aktif di background saat UI baru dibuka
+    if (_audioService.currentTrack != null) {
+      _currentTrack = _audioService.currentTrack;
+      _currentLyricIndex = _currentTrack!.activeLyricIndex;
+      _isPlaying = _audioService.isPlaying;
+      _currentPosition = _audioService.currentPosition;
+    } else if (_tracks.isNotEmpty) {
       _currentTrack = _tracks.first;
       _currentLyricIndex = _currentTrack!.activeLyricIndex;
     }
@@ -92,18 +106,26 @@ class PlayerController extends ChangeNotifier {
   }
 
   void _setupAudioStreams() {
-    _audioService.handler.onSkipToNext = () {
-      nextTrack();
-    };
-
-    _audioService.handler.onSkipToPrevious = () {
-      previousTrack();
-    };
-
     _audioService.handler.onStop = () {
       _isPlaying = false;
       notifyListeners();
     };
+
+    // Sinkronkan state track saat lagu berubah (misal dari notifikasi background / lock screen)
+    _mediaItemSub = _audioService.mediaItemStream.listen((item) {
+      if (item != null) {
+        final activeTrack = _audioService.currentTrack;
+        if (activeTrack != null && _currentTrack?.id != activeTrack.id) {
+          _currentTrack = activeTrack;
+          _currentLyricIndex = activeTrack.activeLyricIndex;
+          _actualDuration = item.duration;
+          notifyListeners();
+          if (activeTrack.syncedLyrics.isEmpty && !activeTrack.isInstrumental) {
+            _fetchLyricsForTrack(activeTrack);
+          }
+        }
+      }
+    });
 
     _positionSub = _audioService.positionStream.listen((pos) {
       _currentPosition = pos;
@@ -147,15 +169,6 @@ class PlayerController extends ChangeNotifier {
       if (_isPlaying != playing) {
         _isPlaying = playing;
         notifyListeners();
-      }
-
-      if (state.processingState == ProcessingState.completed) {
-        if (_isRepeat) {
-          _audioService.seek(Duration.zero);
-          _audioService.resume();
-        } else {
-          nextTrack();
-        }
       }
     });
   }
@@ -675,40 +688,11 @@ class PlayerController extends ChangeNotifier {
   }
 
   void nextTrack() {
-    if (_tracks.isEmpty) return;
-    if (_isShuffle && _tracks.length > 1) {
-      final random = Random();
-      int nextIdx = random.nextInt(_tracks.length);
-      while (_currentTrack != null && _tracks[nextIdx].id == _currentTrack!.id) {
-        nextIdx = random.nextInt(_tracks.length);
-      }
-      playTrack(_tracks[nextIdx]);
-    } else {
-      final currentIndex = _currentTrack == null
-          ? -1
-          : _tracks.indexWhere((t) => t.id == _currentTrack!.id);
-      if (currentIndex != -1 && currentIndex < _tracks.length - 1) {
-        playTrack(_tracks[currentIndex + 1]);
-      } else {
-        playTrack(_tracks.first);
-      }
-    }
+    _audioService.skipToNext();
   }
 
   void previousTrack() {
-    if (_tracks.isEmpty) return;
-    if (_currentPosition.inSeconds > 3) {
-      seekTo(0.0);
-      return;
-    }
-    final currentIndex = _currentTrack == null
-        ? -1
-        : _tracks.indexWhere((t) => t.id == _currentTrack!.id);
-    if (currentIndex > 0) {
-      playTrack(_tracks[currentIndex - 1]);
-    } else {
-      playTrack(_tracks.last);
-    }
+    _audioService.skipToPrevious();
   }
 
   void toggleFavorite(int trackId) {
@@ -726,12 +710,13 @@ class PlayerController extends ChangeNotifier {
 
   void toggleShuffle() {
     _isShuffle = !_isShuffle;
+    _audioService.setShuffle(_isShuffle);
     notifyListeners();
   }
 
   void toggleRepeat() {
     _isRepeat = !_isRepeat;
-    _audioService.setLoop(_isRepeat);
+    _audioService.setRepeat(_isRepeat);
     notifyListeners();
   }
 
@@ -929,6 +914,7 @@ class PlayerController extends ChangeNotifier {
     _positionSub?.cancel();
     _durationSub?.cancel();
     _playerStateSub?.cancel();
+    _mediaItemSub?.cancel();
     // Jangan panggil _audioService.dispose() di sini agar Background Service tetap hidup saat UI ditutup!
     super.dispose();
   }

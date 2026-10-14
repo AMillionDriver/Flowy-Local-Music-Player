@@ -25,7 +25,7 @@ Future<void> main() async {
         androidNotificationChannelDescription: 'Menampilkan kontrol pemutaran media Flowy',
         androidNotificationIcon: 'mipmap/ic_launcher',
         androidShowNotificationBadge: false, // Hemat memori bitmap badge
-        androidStopForegroundOnPause: true, // Notifikasi bisa di-swipe hilang saat dipause & foreground service dilepas bersih
+        androidStopForegroundOnPause: false, // Pertahankan Foreground Service agar tombol notifikasi tetap responsif saat app ditutup
       ),
     );
   } catch (e) {

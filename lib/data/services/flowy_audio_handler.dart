@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
@@ -7,12 +8,13 @@ import '../models/track.dart';
 class FlowyAudioHandler extends BaseAudioHandler with SeekHandler {
   final AudioPlayer _player;
 
-  // Antrean lagu & index dikelola mandiri di level AudioHandler
+  // Antrean lagu & status pemutaran dikelola 100% mandiri di level AudioHandler
   List<Track> _playlist = [];
   int _currentIndex = -1;
+  Track? _currentTrack;
+  bool _isShuffle = false;
+  bool _isRepeat = false;
 
-  VoidCallback? onSkipToNext;
-  VoidCallback? onSkipToPrevious;
   VoidCallback? onStop;
 
   FlowyAudioHandler({AudioPlayer? player}) : _player = player ?? AudioPlayer() {
@@ -22,12 +24,30 @@ class FlowyAudioHandler extends BaseAudioHandler with SeekHandler {
   AudioPlayer get player => _player;
   List<Track> get playlist => List.unmodifiable(_playlist);
   int get currentIndex => _currentIndex;
+  Track? get currentTrack => _currentTrack;
+  bool get isShuffle => _isShuffle;
+  bool get isRepeat => _isRepeat;
 
   void updatePlaylist(List<Track> tracks, {int? activeIndex}) {
     _playlist = List<Track>.from(tracks);
-    if (activeIndex != null) {
+    if (activeIndex != null && activeIndex >= 0 && activeIndex < _playlist.length) {
       _currentIndex = activeIndex;
+      _currentTrack = _playlist[_currentIndex];
+    } else if (_currentTrack != null) {
+      final foundIdx = _playlist.indexWhere((t) => t.id == _currentTrack!.id);
+      if (foundIdx != -1) {
+        _currentIndex = foundIdx;
+      }
     }
+  }
+
+  void setShuffle(bool shuffle) {
+    _isShuffle = shuffle;
+  }
+
+  void setRepeat(bool repeat) {
+    _isRepeat = repeat;
+    _player.setLoopMode(repeat ? LoopMode.one : LoopMode.off);
   }
 
   void _initAudioStreams() {
@@ -57,14 +77,47 @@ class FlowyAudioHandler extends BaseAudioHandler with SeekHandler {
         updatePosition: _player.position,
         bufferedPosition: _player.bufferedPosition,
         speed: _player.speed,
-        queueIndex: event.currentIndex,
+        queueIndex: _currentIndex,
       ));
     });
+
+    // 2. Auto-advance mandiri: lanjut ke lagu berikutnya saat selesai, bahkan saat app di-kill
+    _player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        if (_isRepeat) {
+          _player.seek(Duration.zero);
+          _player.play();
+        } else {
+          skipToNext();
+        }
+      }
+    });
+  }
+
+  /// Memutar lagu pada index tertentu dari antrean internal
+  Future<bool> playAtIndex(int index) async {
+    if (_playlist.isEmpty) return false;
+    if (index < 0 || index >= _playlist.length) {
+      index = 0;
+    }
+    _currentIndex = index;
+    return await playTrack(_playlist[_currentIndex]);
   }
 
   /// Memutar lagu dan otomatis meng-update Media Notification di Status Bar & Lock Screen
   Future<bool> playTrack(Track track) async {
     try {
+      _currentTrack = track;
+
+      // Sinkronkan ke antrean jika belum ada
+      final foundIdx = _playlist.indexWhere((t) => t.id == track.id);
+      if (foundIdx != -1) {
+        _currentIndex = foundIdx;
+      } else {
+        _playlist.insert(0, track);
+        _currentIndex = 0;
+      }
+
       // 1. Hitung durasi awal untuk MediaItem notifikasi
       Duration? itemDuration;
       if (track.durationMs != null && track.durationMs! > 0) {
@@ -182,44 +235,43 @@ class FlowyAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> skipToNext() async {
-    if (onSkipToNext != null) {
-      onSkipToNext!();
-      return;
-    }
-    // Fallback mandiri saat aplikasi ditutup (UI musnah):
-    if (_playlist.isNotEmpty) {
+    if (_playlist.isEmpty) return;
+
+    if (_isShuffle && _playlist.length > 1) {
+      final random = Random();
+      int nextIdx = random.nextInt(_playlist.length);
+      while (_currentIndex != -1 && nextIdx == _currentIndex && _playlist.length > 1) {
+        nextIdx = random.nextInt(_playlist.length);
+      }
+      await playAtIndex(nextIdx);
+    } else {
       int nextIndex = _currentIndex + 1;
       if (nextIndex >= _playlist.length) {
-        nextIndex = 0;
+        nextIndex = 0; // Loop kembali ke awal antrean
       }
-      _currentIndex = nextIndex;
-      await playTrack(_playlist[_currentIndex]);
+      await playAtIndex(nextIndex);
     }
   }
 
   @override
   Future<void> skipToPrevious() async {
-    if (onSkipToPrevious != null) {
-      onSkipToPrevious!();
+    if (_playlist.isEmpty) return;
+
+    // Jika posisi putar sudah lebih dari 3 detik, restart lagu saat ini
+    if (_player.position.inSeconds > 3) {
+      await _player.seek(Duration.zero);
       return;
     }
-    // Fallback mandiri saat aplikasi ditutup (UI musnah):
-    if (_playlist.isNotEmpty) {
-      if (_player.position.inSeconds > 3) {
-        await _player.seek(Duration.zero);
-        return;
-      }
-      int prevIndex = _currentIndex - 1;
-      if (prevIndex < 0) {
-        prevIndex = _playlist.length - 1;
-      }
-      _currentIndex = prevIndex;
-      await playTrack(_playlist[_currentIndex]);
+
+    int prevIndex = _currentIndex - 1;
+    if (prevIndex < 0) {
+      prevIndex = _playlist.length - 1;
     }
+    await playAtIndex(prevIndex);
   }
 
   Future<void> setLoop(bool loop) async {
-    await _player.setLoopMode(loop ? LoopMode.one : LoopMode.off);
+    setRepeat(loop);
   }
 
   Future<void> disposePlayer() async {
